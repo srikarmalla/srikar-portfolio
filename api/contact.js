@@ -3,7 +3,6 @@ import { Resend } from 'resend'
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 export default async function handler(req, res) {
-  // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({
       success: false,
@@ -14,7 +13,6 @@ export default async function handler(req, res) {
   try {
     const { name, email, message } = req.body
 
-    // Validate form
     if (!name || !email || !message) {
       return res.status(400).json({
         success: false,
@@ -22,183 +20,320 @@ export default async function handler(req, res) {
       })
     }
 
-    // Send email to Srikar
+    const safeName = escapeHtml(name)
+    const safeEmail = escapeHtml(email)
+    const safeMessage = escapeHtml(message)
+
+    const replySubject = `Re: Your message to Srikar Malla`
+
     const { data, error } = await resend.emails.send({
       from: 'Srikar Malla Portfolio <onboarding@resend.dev>',
 
-      to: [process.env.CONTACT_EMAIL],
-
-      // When you press Reply in Gmail,
-      // it will reply to the visitor.
+      // IMPORTANT:
+      // This keeps the visitor's email as the Reply-To address.
       replyTo: email,
 
-      subject: `New Portfolio Message from ${name}`,
+      to: [process.env.CONTACT_EMAIL],
+
+      subject: `New portfolio inquiry from ${name}`,
 
       html: `
         <!DOCTYPE html>
+        <html lang="en">
+          <head>
+            <meta charset="UTF-8" />
+            <meta
+              name="viewport"
+              content="width=device-width, initial-scale=1.0"
+            />
+            <title>New Portfolio Inquiry</title>
+          </head>
 
-        <html>
           <body
             style="
-              margin: 0;
-              padding: 0;
-              background: #f4f4f7;
-              font-family: Arial, Helvetica, sans-serif;
+              margin:0;
+              padding:0;
+              background:#f3f4f6;
+              font-family:Arial,Helvetica,sans-serif;
+              color:#111827;
             "
           >
 
             <div
               style="
-                max-width: 620px;
-                margin: 40px auto;
-                background: #ffffff;
-                border-radius: 16px;
-                overflow: hidden;
-                box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+                width:100%;
+                padding:40px 16px;
+                box-sizing:border-box;
               "
             >
 
-              <!-- HEADER -->
-
+              <!-- Main Card -->
               <div
                 style="
-                  padding: 30px;
-                  background: linear-gradient(
-                    135deg,
-                    #ec4899,
-                    #f97316
-                  );
-                  color: white;
+                  max-width:640px;
+                  margin:0 auto;
+                  background:#ffffff;
+                  border-radius:20px;
+                  overflow:hidden;
+                  box-shadow:0 10px 35px rgba(0,0,0,0.08);
                 "
               >
 
-                <h1
-                  style="
-                    margin: 0;
-                    font-size: 24px;
-                  "
-                >
-                  New Portfolio Message
-                </h1>
-
-                <p
-                  style="
-                    margin: 8px 0 0;
-                    opacity: 0.9;
-                    font-size: 14px;
-                  "
-                >
-                  Someone contacted you through your portfolio.
-                </p>
-
-              </div>
-
-
-              <!-- CONTENT -->
-
-              <div style="padding: 32px;">
-
-                <p
-                  style="
-                    margin-top: 0;
-                    color: #555;
-                    font-size: 14px;
-                  "
-                >
-                  You received a new message from your portfolio website.
-                </p>
-
-
-                <!-- CONTACT DETAILS -->
-
+                <!-- Header -->
                 <div
                   style="
-                    margin-top: 24px;
-                    padding: 20px;
-                    background: #f8f8fa;
-                    border-radius: 12px;
+                    padding:36px 32px;
+                    background:linear-gradient(
+                      135deg,
+                      #ec4899 0%,
+                      #f43f5e 50%,
+                      #f97316 100%
+                    );
+                    color:#ffffff;
                   "
                 >
 
-                  <p style="margin: 0 0 12px;">
-                    <strong>Name:</strong>
-                    ${escapeHtml(name)}
-                  </p>
-
-                  <p style="margin: 0;">
-                    <strong>Email:</strong>
-                    ${escapeHtml(email)}
-                  </p>
-
-                </div>
-
-
-                <!-- MESSAGE -->
-
-                <h3
-                  style="
-                    margin-top: 28px;
-                    color: #222;
-                  "
-                >
-                  Message
-                </h3>
-
-                <div
-                  style="
-                    padding: 20px;
-                    border-left: 4px solid #ec4899;
-                    background: #fafafa;
-                    color: #444;
-                    line-height: 1.7;
-                    white-space: pre-wrap;
-                  "
-                >
-                  ${escapeHtml(message)}
-                </div>
-
-
-                <!-- REPLY BUTTON -->
-
-                <div
-                  style="
-                    margin-top: 28px;
-                    text-align: center;
-                  "
-                >
-
-                  <a
-                    href="mailto:${escapeHtml(email)}"
+                  <div
                     style="
-                      display: inline-block;
-                      padding: 12px 22px;
-                      background: #111827;
-                      color: white;
-                      text-decoration: none;
-                      border-radius: 8px;
-                      font-size: 14px;
+                      display:inline-block;
+                      padding:7px 12px;
+                      margin-bottom:16px;
+                      border:1px solid rgba(255,255,255,0.3);
+                      border-radius:999px;
+                      background:rgba(255,255,255,0.12);
+                      font-size:12px;
+                      font-weight:bold;
+                      letter-spacing:0.5px;
                     "
                   >
-                    Reply to ${escapeHtml(name)}
-                  </a>
+                    PORTFOLIO CONTACT
+                  </div>
+
+                  <h1
+                    style="
+                      margin:0;
+                      font-size:28px;
+                      line-height:1.25;
+                      font-weight:700;
+                    "
+                  >
+                    New Portfolio Inquiry
+                  </h1>
+
+                  <p
+                    style="
+                      margin:10px 0 0;
+                      font-size:15px;
+                      line-height:1.6;
+                      color:rgba(255,255,255,0.9);
+                    "
+                  >
+                    Someone reached out to you through your portfolio website.
+                  </p>
 
                 </div>
 
-              </div>
+                <!-- Content -->
+                <div style="padding:32px;">
 
+                  <p
+                    style="
+                      margin:0 0 24px;
+                      font-size:15px;
+                      line-height:1.7;
+                      color:#4b5563;
+                    "
+                  >
+                    You have received a new message from a visitor.
+                    Here are their contact details:
+                  </p>
 
-              <!-- FOOTER -->
+                  <!-- Contact Details -->
+                  <div
+                    style="
+                      padding:22px;
+                      background:#f9fafb;
+                      border:1px solid #e5e7eb;
+                      border-radius:14px;
+                    "
+                  >
 
-              <div
-                style="
-                  padding: 22px 32px;
-                  border-top: 1px solid #eeeeee;
-                  color: #888;
-                  font-size: 12px;
-                  text-align: center;
-                "
-              >
-                Sent from Srikar Malla's Portfolio
+                    <div style="margin-bottom:16px;">
+                      <div
+                        style="
+                          margin-bottom:5px;
+                          font-size:12px;
+                          font-weight:bold;
+                          text-transform:uppercase;
+                          letter-spacing:0.7px;
+                          color:#9ca3af;
+                        "
+                      >
+                        Name
+                      </div>
+
+                      <div
+                        style="
+                          font-size:16px;
+                          font-weight:600;
+                          color:#111827;
+                        "
+                      >
+                        ${safeName}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div
+                        style="
+                          margin-bottom:5px;
+                          font-size:12px;
+                          font-weight:bold;
+                          text-transform:uppercase;
+                          letter-spacing:0.7px;
+                          color:#9ca3af;
+                        "
+                      >
+                        Email
+                      </div>
+
+                      <a
+                        href="mailto:${encodeURIComponent(email)}"
+                        style="
+                          font-size:16px;
+                          color:#db2777;
+                          text-decoration:none;
+                          word-break:break-word;
+                        "
+                      >
+                        ${safeEmail}
+                      </a>
+                    </div>
+
+                  </div>
+
+                  <!-- Message -->
+                  <div style="margin-top:30px;">
+
+                    <h2
+                      style="
+                        margin:0 0 12px;
+                        font-size:18px;
+                        color:#111827;
+                      "
+                    >
+                      Message
+                    </h2>
+
+                    <div
+                      style="
+                        padding:22px;
+                        background:#f9fafb;
+                        border-left:4px solid #ec4899;
+                        border-radius:0 12px 12px 0;
+                        color:#374151;
+                        font-size:15px;
+                        line-height:1.8;
+                        white-space:pre-wrap;
+                        word-break:break-word;
+                      "
+                    >
+                      ${safeMessage}
+                    </div>
+
+                  </div>
+
+                  <!-- Reply Button -->
+                  <div
+                    style="
+                      margin-top:32px;
+                      text-align:center;
+                    "
+                  >
+
+                    <a
+                      href="mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(replySubject)}"
+                      style="
+                        display:inline-block;
+                        padding:14px 26px;
+                        background:#111827;
+                        color:#ffffff;
+                        text-decoration:none;
+                        border-radius:10px;
+                        font-size:14px;
+                        font-weight:600;
+                      "
+                    >
+                      Reply to ${safeName}
+                    </a>
+
+                  </div>
+
+                  <!-- Reply-To Notice -->
+                  <div
+                    style="
+                      margin-top:24px;
+                      padding:14px 16px;
+                      background:#fff7ed;
+                      border:1px solid #fed7aa;
+                      border-radius:10px;
+                      color:#9a3412;
+                      font-size:12px;
+                      line-height:1.6;
+                    "
+                  >
+                    <strong>Reply-To:</strong>
+                    ${safeEmail}
+                    <br />
+                    Clicking Reply will respond directly to this visitor.
+                  </div>
+
+                </div>
+
+                <!-- Footer -->
+                <div
+                  style="
+                    padding:22px 32px;
+                    border-top:1px solid #e5e7eb;
+                    background:#fafafa;
+                    text-align:center;
+                  "
+                >
+
+                  <p
+                    style="
+                      margin:0;
+                      font-size:13px;
+                      font-weight:600;
+                      color:#374151;
+                    "
+                  >
+                    Srikar Malla
+                  </p>
+
+                  <p
+                    style="
+                      margin:5px 0 0;
+                      font-size:12px;
+                      color:#9ca3af;
+                    "
+                  >
+                    Computer Science & Engineering • Portfolio
+                  </p>
+
+                  <p
+                    style="
+                      margin:12px 0 0;
+                      font-size:11px;
+                      color:#9ca3af;
+                    "
+                  >
+                    This email was automatically generated by your portfolio
+                    contact form.
+                  </p>
+
+                </div>
+
               </div>
 
             </div>
@@ -208,7 +343,6 @@ export default async function handler(req, res) {
       `,
     })
 
-    // Resend returned an error
     if (error) {
       console.error('Resend error:', error)
 
@@ -223,7 +357,6 @@ export default async function handler(req, res) {
       message: 'Message sent successfully.',
       id: data?.id,
     })
-
   } catch (error) {
     console.error('Server error:', error)
 
@@ -233,12 +366,6 @@ export default async function handler(req, res) {
     })
   }
 }
-
-
-/*
-  Escape HTML characters so a visitor
-  cannot inject HTML into your email.
-*/
 
 function escapeHtml(value) {
   return String(value)
