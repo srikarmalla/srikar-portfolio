@@ -5,21 +5,57 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 
 const REPLY_SECRET = process.env.REPLY_SECRET
 
+/*
+|--------------------------------------------------------------------------
+| MAIN API HANDLER
+|--------------------------------------------------------------------------
+*/
+
 export default async function handler(req, res) {
+  /*
+  |--------------------------------------------------------------------------
+  | Check environment variables
+  |--------------------------------------------------------------------------
+  */
+
+  if (!process.env.RESEND_API_KEY) {
+    console.error('RESEND_API_KEY is missing.')
+
+    return res.status(500).json({
+      success: false,
+      message: 'Email service is not configured.',
+    })
+  }
+
   if (!REPLY_SECRET) {
+    console.error('REPLY_SECRET is missing.')
+
     return res.status(500).json({
       success: false,
       message: 'Reply system is not configured.',
     })
   }
 
-  // -----------------------------
-  // GET CONTACT INFORMATION
-  // -----------------------------
+  /*
+  |--------------------------------------------------------------------------
+  | GET
+  |
+  | Used by Reply.jsx to retrieve visitor information.
+  |
+  | /api/reply?token=...
+  |--------------------------------------------------------------------------
+  */
 
   if (req.method === 'GET') {
     try {
-      const { token } = req.query
+      const { token } = req.query || {}
+
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({
+          success: false,
+          message: 'Reply token is required.',
+        })
+      }
 
       const contact = verifyToken(token)
 
@@ -37,8 +73,9 @@ export default async function handler(req, res) {
           email: contact.email,
         },
       })
+
     } catch (error) {
-      console.error(error)
+      console.error('GET reply error:', error)
 
       return res.status(500).json({
         success: false,
@@ -48,20 +85,71 @@ export default async function handler(req, res) {
   }
 
 
-  // -----------------------------
-  // SEND REPLY
-  // -----------------------------
+  /*
+  |--------------------------------------------------------------------------
+  | POST
+  |
+  | Used by Reply.jsx to send your reply to the visitor.
+  |
+  | POST /api/reply
+  |--------------------------------------------------------------------------
+  */
 
   if (req.method === 'POST') {
     try {
-      const { token, message } = req.body
+      const {
+        token,
+        message,
+      } = req.body || {}
 
-      if (!token || !message?.trim()) {
+      /*
+      |--------------------------------------------------------------------------
+      | Validate input
+      |--------------------------------------------------------------------------
+      */
+
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({
+          success: false,
+          message: 'Reply token is required.',
+        })
+      }
+
+      if (!message || typeof message !== 'string') {
         return res.status(400).json({
           success: false,
           message: 'Reply message is required.',
         })
       }
+
+      const cleanMessage = message.trim()
+
+      if (!cleanMessage) {
+        return res.status(400).json({
+          success: false,
+          message: 'Reply message is required.',
+        })
+      }
+
+      /*
+      |--------------------------------------------------------------------------
+      | Prevent excessively large replies
+      |--------------------------------------------------------------------------
+      */
+
+      if (cleanMessage.length > 10000) {
+        return res.status(400).json({
+          success: false,
+          message: 'Reply is too long.',
+        })
+      }
+
+
+      /*
+      |--------------------------------------------------------------------------
+      | Verify token
+      |--------------------------------------------------------------------------
+      */
 
       const contact = verifyToken(token)
 
@@ -72,14 +160,41 @@ export default async function handler(req, res) {
         })
       }
 
+
+      /*
+      |--------------------------------------------------------------------------
+      | Escape user/contact data before inserting into HTML
+      |--------------------------------------------------------------------------
+      */
+
       const safeName = escapeHtml(contact.name)
-      const safeMessage = escapeHtml(message)
+      const safeMessage = escapeHtml(cleanMessage)
+
+
+      /*
+      |--------------------------------------------------------------------------
+      | Email subject
+      |--------------------------------------------------------------------------
+      */
 
       const subject = 'Re: Your message to Srikar Malla'
 
-      const { data, error } = await resend.emails.send({
-        from: 'Srikar Malla <onboarding@resend.dev>',
 
+      /*
+      |--------------------------------------------------------------------------
+      | Send email through Resend
+      |
+      | IMPORTANT:
+      | Your domain is now verified.
+      |--------------------------------------------------------------------------
+      */
+
+      const { data, error } = await resend.emails.send({
+        from: 'Srikar Malla <hello@srikarmalla.dev>',
+
+        /*
+          Send directly to the visitor.
+        */
         to: [contact.email],
 
         subject,
@@ -90,6 +205,13 @@ export default async function handler(req, res) {
         }),
       })
 
+
+      /*
+      |--------------------------------------------------------------------------
+      | Resend error
+      |--------------------------------------------------------------------------
+      */
+
       if (error) {
         console.error('Resend error:', error)
 
@@ -98,6 +220,13 @@ export default async function handler(req, res) {
           message: 'Failed to send reply.',
         })
       }
+
+
+      /*
+      |--------------------------------------------------------------------------
+      | Success
+      |--------------------------------------------------------------------------
+      */
 
       return res.status(200).json({
         success: true,
@@ -116,6 +245,12 @@ export default async function handler(req, res) {
   }
 
 
+  /*
+  |--------------------------------------------------------------------------
+  | Unsupported HTTP method
+  |--------------------------------------------------------------------------
+  */
+
   return res.status(405).json({
     success: false,
     message: 'Method not allowed.',
@@ -123,9 +258,176 @@ export default async function handler(req, res) {
 }
 
 
-// =====================================
-// TOKEN FUNCTIONS
-// =====================================
+/*
+|--------------------------------------------------------------------------
+| TOKEN VERIFICATION
+|--------------------------------------------------------------------------
+*/
+
+function verifyToken(token) {
+  try {
+    /*
+    |--------------------------------------------------------------------------
+    | Token format:
+    |
+    | encodedPayload.signature
+    |--------------------------------------------------------------------------
+    */
+
+    const parts = token.split('.')
+
+    if (parts.length !== 2) {
+      return null
+    }
+
+    const [
+      encodedPayload,
+      signature,
+    ] = parts
+
+    if (!encodedPayload || !signature) {
+      return null
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Recreate expected signature
+    |--------------------------------------------------------------------------
+    */
+
+    const expectedSignature = createSignature(encodedPayload)
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Convert signatures to Buffers
+    |--------------------------------------------------------------------------
+    */
+
+    const actualBuffer = Buffer.from(
+      signature,
+      'base64url'
+    )
+
+    const expectedBuffer = Buffer.from(
+      expectedSignature,
+      'base64url'
+    )
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Prevent timingSafeEqual from throwing
+    | when lengths are different.
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+      actualBuffer.length !== expectedBuffer.length
+    ) {
+      return null
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Secure signature comparison
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+      !crypto.timingSafeEqual(
+        actualBuffer,
+        expectedBuffer
+      )
+    ) {
+      return null
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Decode payload
+    |--------------------------------------------------------------------------
+    */
+
+    const payload = JSON.parse(
+      Buffer
+        .from(encodedPayload, 'base64url')
+        .toString('utf8')
+    )
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Validate payload
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+      !payload ||
+      typeof payload !== 'object'
+    ) {
+      return null
+    }
+
+    if (
+      typeof payload.name !== 'string' ||
+      typeof payload.email !== 'string' ||
+      typeof payload.exp !== 'number'
+    ) {
+      return null
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Validate email
+    |--------------------------------------------------------------------------
+    */
+
+    if (!isValidEmail(payload.email)) {
+      return null
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Check expiration
+    |--------------------------------------------------------------------------
+    */
+
+    if (Date.now() > payload.exp) {
+      return null
+    }
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Token is valid
+    |--------------------------------------------------------------------------
+    */
+
+    return {
+      name: payload.name,
+      email: payload.email,
+      exp: payload.exp,
+    }
+
+  } catch (error) {
+    console.error('Token verification error:', error)
+
+    return null
+  }
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| CREATE HMAC SIGNATURE
+|--------------------------------------------------------------------------
+*/
 
 function createSignature(payload) {
   return crypto
@@ -134,45 +436,39 @@ function createSignature(payload) {
     .digest('base64url')
 }
 
-function verifyToken(token) {
-  try {
-    const [encodedPayload, signature] = token.split('.')
 
-    if (!encodedPayload || !signature) {
-      return null
-    }
+/*
+|--------------------------------------------------------------------------
+| EMAIL VALIDATION
+|--------------------------------------------------------------------------
+*/
 
-    const expectedSignature = createSignature(encodedPayload)
-
-    if (
-      !crypto.timingSafeEqual(
-        Buffer.from(signature),
-        Buffer.from(expectedSignature)
-      )
-    ) {
-      return null
-    }
-
-    const payload = JSON.parse(
-      Buffer.from(encodedPayload, 'base64url').toString('utf8')
-    )
-
-    // Token expires after 7 days
-    if (Date.now() > payload.exp) {
-      return null
-    }
-
-    return payload
-
-  } catch {
-    return null
-  }
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
 }
 
 
-// =====================================
-// EMAIL TEMPLATE
-// =====================================
+/*
+|--------------------------------------------------------------------------
+| HTML ESCAPE
+|--------------------------------------------------------------------------
+*/
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| REPLY EMAIL TEMPLATE
+|--------------------------------------------------------------------------
+*/
 
 function createReplyEmail({ name, message }) {
   return `
@@ -181,6 +477,7 @@ function createReplyEmail({ name, message }) {
 <html lang="en">
 
 <head>
+
   <meta charset="UTF-8">
 
   <meta
@@ -189,6 +486,7 @@ function createReplyEmail({ name, message }) {
   >
 
   <title>Reply from Srikar Malla</title>
+
 </head>
 
 <body
@@ -209,6 +507,8 @@ function createReplyEmail({ name, message }) {
     "
   >
 
+    <!-- MAIN CARD -->
+
     <div
       style="
         max-width:640px;
@@ -219,6 +519,7 @@ function createReplyEmail({ name, message }) {
         box-shadow:0 10px 35px rgba(0,0,0,0.08);
       "
     >
+
 
       <!-- HEADER -->
 
@@ -251,15 +552,18 @@ function createReplyEmail({ name, message }) {
           SRIKAR MALLA
         </div>
 
+
         <h1
           style="
             margin:0;
             font-size:28px;
             line-height:1.25;
+            font-weight:700;
           "
         >
           Thank You For Reaching Out
         </h1>
+
 
         <p
           style="
@@ -325,6 +629,7 @@ function createReplyEmail({ name, message }) {
             Best regards,
           </p>
 
+
           <p
             style="
               margin:5px 0 0;
@@ -336,6 +641,7 @@ function createReplyEmail({ name, message }) {
             Srikar Malla
           </p>
 
+
           <p
             style="
               margin:5px 0 0;
@@ -343,7 +649,7 @@ function createReplyEmail({ name, message }) {
               color:#6b7280;
             "
           >
-            Computer Science & Engineering
+            Computer Science &amp; Engineering
           </p>
 
         </div>
@@ -369,6 +675,7 @@ function createReplyEmail({ name, message }) {
           >
             GitHub
           </a>
+
 
           <a
             href="https://www.linkedin.com/in/srikar-malla/"
@@ -422,18 +729,4 @@ function createReplyEmail({ name, message }) {
 
 </html>
 `
-}
-
-
-// =====================================
-// HTML ESCAPE
-// =====================================
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
 }

@@ -5,7 +5,41 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 
 const REPLY_SECRET = process.env.REPLY_SECRET
 
+/*
+  Escape user input before putting it into HTML email.
+*/
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+/*
+  Basic email validation.
+*/
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+/*
+  Create a signed reply token.
+
+  The token contains:
+  - visitor name
+  - visitor email
+  - expiry time
+
+  The HMAC signature prevents someone from
+  modifying the visitor information.
+*/
 function createReplyToken(name, email) {
+  if (!REPLY_SECRET) {
+    throw new Error('REPLY_SECRET is not configured.')
+  }
+
   const payload = {
     name,
     email,
@@ -24,7 +58,12 @@ function createReplyToken(name, email) {
   return `${encodedPayload}.${signature}`
 }
 
+
 export default async function handler(req, res) {
+
+  /*
+    Only POST requests are allowed.
+  */
   if (req.method !== 'POST') {
     return res.status(405).json({
       success: false,
@@ -33,8 +72,51 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { name, email, message } = req.body
 
+    /*
+      Check required environment variables.
+    */
+    if (!process.env.RESEND_API_KEY) {
+      console.error('RESEND_API_KEY is missing.')
+
+      return res.status(500).json({
+        success: false,
+        message: 'Email service is not configured.',
+      })
+    }
+
+    if (!process.env.CONTACT_EMAIL) {
+      console.error('CONTACT_EMAIL is missing.')
+
+      return res.status(500).json({
+        success: false,
+        message: 'Contact email is not configured.',
+      })
+    }
+
+    if (!REPLY_SECRET) {
+      console.error('REPLY_SECRET is missing.')
+
+      return res.status(500).json({
+        success: false,
+        message: 'Reply service is not configured.',
+      })
+    }
+
+
+    /*
+      Get form data.
+    */
+    const {
+      name,
+      email,
+      message,
+    } = req.body || {}
+
+
+    /*
+      Check required fields.
+    */
     if (!name || !email || !message) {
       return res.status(400).json({
         success: false,
@@ -42,56 +124,129 @@ export default async function handler(req, res) {
       })
     }
 
-    const safeName = escapeHtml(name)
-    const safeEmail = escapeHtml(email)
-    const safeMessage = escapeHtml(message)
 
     /*
-      Create secure reply token
+      Clean whitespace.
     */
-    const replyToken = createReplyToken(name, email)
+    const cleanName = String(name).trim()
+    const cleanEmail = String(email).trim()
+    const cleanMessage = String(message).trim()
+
 
     /*
-      Get website URL
+      Validate values.
+    */
+    if (!cleanName || !cleanEmail || !cleanMessage) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please fill in all fields.',
+      })
+    }
 
-      Example:
-      https://srikar-portfolio-three.vercel.app
+
+    /*
+      Validate email format.
+    */
+    if (!isValidEmail(cleanEmail)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please enter a valid email address.',
+      })
+    }
+
+
+    /*
+      Prevent excessively large submissions.
+    */
+    if (cleanName.length > 100) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name is too long.',
+      })
+    }
+
+    if (cleanEmail.length > 254) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email address is too long.',
+      })
+    }
+
+    if (cleanMessage.length > 5000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Message is too long.',
+      })
+    }
+
+
+    /*
+      Escape values before inserting them
+      into the HTML email.
+    */
+    const safeName = escapeHtml(cleanName)
+    const safeEmail = escapeHtml(cleanEmail)
+    const safeMessage = escapeHtml(cleanMessage)
+
+
+    /*
+      Create secure reply token.
+    */
+    const replyToken = createReplyToken(
+      cleanName,
+      cleanEmail
+    )
+
+
+    /*
+      Get website URL.
+
+      SITE_URL should be configured in Vercel as:
+
+      https://www.srikarmalla.dev
     */
     const siteUrl = (
       process.env.SITE_URL ||
       `https://${req.headers.host}`
     ).replace(/\/+$/, '')
 
+
     /*
-      IMPORTANT:
-      The old version incorrectly used:
-
-      ${siteUrl}/?reply=...
-
-      That opens the home page.
-
-      We need:
-
-      ${siteUrl}/reply?reply=...
+      Custom reply page URL.
     */
     const replyUrl =
       `${siteUrl}/reply?reply=${encodeURIComponent(replyToken)}`
 
-    const replySubject = `Re: Your message to Srikar Malla`
 
+    /*
+      Send email using your verified domain.
+    */
     const { data, error } = await resend.emails.send({
-      from: 'Srikar Malla Portfolio <onboarding@resend.dev>',
 
       /*
-        This allows normal Gmail "Reply" to go
-        directly to the visitor.
+        Your verified Resend domain.
       */
-      replyTo: email,
+      from: 'Srikar Malla <hello@srikarmalla.dev>',
 
+      /*
+        When you press normal "Reply" in Gmail,
+        the reply will go to the visitor.
+      */
+      replyTo: cleanEmail,
+
+      /*
+        Your receiving email.
+      */
       to: [process.env.CONTACT_EMAIL],
 
-      subject: `New portfolio inquiry from ${name}`,
+      /*
+        Email subject.
+      */
+      subject: `New portfolio inquiry from ${cleanName}`,
 
+      /*
+        HTML email.
+      */
       html: `
 <!DOCTYPE html>
 <html lang="en">
@@ -125,8 +280,6 @@ export default async function handler(req, res) {
     "
   >
 
-    <!-- Main Card -->
-
     <div
       style="
         max-width:640px;
@@ -138,7 +291,7 @@ export default async function handler(req, res) {
       "
     >
 
-      <!-- Header -->
+      <!-- HEADER -->
 
       <div
         style="
@@ -194,7 +347,7 @@ export default async function handler(req, res) {
       </div>
 
 
-      <!-- Content -->
+      <!-- CONTENT -->
 
       <div style="padding:32px;">
 
@@ -211,7 +364,7 @@ export default async function handler(req, res) {
         </p>
 
 
-        <!-- Contact Details -->
+        <!-- CONTACT DETAILS -->
 
         <div
           style="
@@ -266,7 +419,7 @@ export default async function handler(req, res) {
             </div>
 
             <a
-              href="mailto:${encodeURIComponent(email)}"
+              href="mailto:${encodeURIComponent(cleanEmail)}"
               style="
                 font-size:16px;
                 color:#db2777;
@@ -282,7 +435,7 @@ export default async function handler(req, res) {
         </div>
 
 
-        <!-- Message -->
+        <!-- MESSAGE -->
 
         <div style="margin-top:30px;">
 
@@ -315,7 +468,7 @@ export default async function handler(req, res) {
         </div>
 
 
-        <!-- Custom Reply Button -->
+        <!-- CUSTOM REPLY BUTTON -->
 
         <div
           style="
@@ -343,7 +496,7 @@ export default async function handler(req, res) {
         </div>
 
 
-        <!-- Reply-To Notice -->
+        <!-- REPLY-TO NOTICE -->
 
         <div
           style="
@@ -363,15 +516,15 @@ export default async function handler(req, res) {
 
           <br />
 
-          Clicking the custom Reply button will open your
-          portfolio reply page.
+          Clicking the custom Reply button will open
+          your portfolio reply page.
 
         </div>
 
       </div>
 
 
-      <!-- Footer -->
+      <!-- FOOTER -->
 
       <div
         style="
@@ -400,7 +553,7 @@ export default async function handler(req, res) {
             color:#9ca3af;
           "
         >
-          Computer Science & Engineering • Portfolio
+          Computer Science &amp; Engineering • Portfolio
         </p>
 
         <p
@@ -410,8 +563,8 @@ export default async function handler(req, res) {
             color:#9ca3af;
           "
         >
-          This email was automatically generated by your portfolio
-          contact form.
+          This email was automatically generated by
+          your portfolio contact form.
         </p>
 
       </div>
@@ -426,6 +579,10 @@ export default async function handler(req, res) {
       `,
     })
 
+
+    /*
+      Handle Resend errors.
+    */
     if (error) {
       console.error('Resend error:', error)
 
@@ -435,6 +592,10 @@ export default async function handler(req, res) {
       })
     }
 
+
+    /*
+      Success response.
+    */
     return res.status(200).json({
       success: true,
       message: 'Message sent successfully.',
@@ -442,6 +603,7 @@ export default async function handler(req, res) {
     })
 
   } catch (error) {
+
     console.error('Server error:', error)
 
     return res.status(500).json({
@@ -449,14 +611,4 @@ export default async function handler(req, res) {
       message: 'Something went wrong.',
     })
   }
-}
-
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
 }
