@@ -1,6 +1,28 @@
 import { Resend } from 'resend'
+import crypto from 'crypto'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
+
+const REPLY_SECRET = process.env.REPLY_SECRET
+
+function createReplyToken(name, email) {
+  const payload = {
+    name,
+    email,
+    exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
+  }
+
+  const encodedPayload = Buffer
+    .from(JSON.stringify(payload))
+    .toString('base64url')
+
+  const signature = crypto
+    .createHmac('sha256', REPLY_SECRET)
+    .update(encodedPayload)
+    .digest('base64url')
+
+  return `${encodedPayload}.${signature}`
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -23,6 +45,12 @@ export default async function handler(req, res) {
     const safeName = escapeHtml(name)
     const safeEmail = escapeHtml(email)
     const safeMessage = escapeHtml(message)
+    
+    const replyToken = createReplyToken(name, email)
+
+    const siteUrl = process.env.SITE_URL ||`https://${req.headers.host}`
+
+    const replyUrl = `${siteUrl}/?reply=${encodeURIComponent(replyToken)}`
 
     const replySubject = `Re: Your message to Srikar Malla`
 
@@ -252,7 +280,7 @@ export default async function handler(req, res) {
                   >
 
                     <a
-                      href="mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(replySubject)}"
+                      href="${replyUrl}""
                       style="
                         display:inline-block;
                         padding:14px 26px;

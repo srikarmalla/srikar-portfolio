@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
+
 import { motion, AnimatePresence } from 'framer-motion'
+
 import { Routes, Route } from 'react-router-dom'
 
 import CharacterUniverse from './pages/CharacterUniverse'
+
 import Navbar from './components/Navbar'
 
 import Hero from './sections/Hero'
@@ -12,6 +15,9 @@ import Projects from './sections/Projects'
 import Education from './sections/Education'
 import Contact from './sections/Contact'
 
+import Reply from './pages/Reply'
+
+
 /* =========================================================
    HOME PAGE
 ========================================================= */
@@ -19,6 +25,7 @@ import Contact from './sections/Contact'
 function HomePage() {
   const [scrollProgress, setScrollProgress] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
+
 
   /* =====================================================
      PAGE LOADING
@@ -33,6 +40,7 @@ function HomePage() {
       clearTimeout(timer)
     }
   }, [])
+
 
   /* =====================================================
      SCROLL PROGRESS
@@ -64,6 +72,7 @@ function HomePage() {
     }
   }, [])
 
+
   /* =====================================================
      SECTION ANIMATION
   ====================================================== */
@@ -89,6 +98,7 @@ function HomePage() {
       ease: 'easeOut',
     },
   }
+
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#080816] text-white">
@@ -146,6 +156,7 @@ function HomePage() {
                 "
               />
 
+
               {/* Purple Glow */}
 
               <div
@@ -160,6 +171,7 @@ function HomePage() {
                   blur-3xl
                 "
               />
+
 
               {/* Orange Glow */}
 
@@ -177,6 +189,7 @@ function HomePage() {
               />
 
             </div>
+
 
             {/* =================================================
                 LOADING LOGO
@@ -215,6 +228,7 @@ function HomePage() {
                 "
               />
 
+
               {/* Rotating Ring */}
 
               <motion.div
@@ -235,6 +249,7 @@ function HomePage() {
                   border-pink-500/40
                 "
               />
+
 
               {/* Logo */}
 
@@ -267,6 +282,7 @@ function HomePage() {
               />
 
             </motion.div>
+
 
             {/* =================================================
                 LOADING TEXT
@@ -470,11 +486,15 @@ function HomePage() {
           NAVBAR
 
           IMPORTANT:
+
           Navbar is INSIDE HomePage.
 
           Therefore when React changes from:
+
               /
+
           to:
+
               /characters
 
           Navbar completely unmounts.
@@ -608,6 +628,7 @@ function HomePage() {
                   </span>
 
                 </div>
+
 
                 <div>
 
@@ -819,6 +840,18 @@ export default function App() {
       <Route
         path="/characters"
         element={<CharacterUniverse />}
+      />
+
+
+      {/* =====================================================
+          PORTFOLIO EMAIL REPLY
+
+          Opens the custom branded reply page.
+      ====================================================== */}
+
+      <Route
+        path="/reply"
+        element={<Reply />}
       />
 
     </Routes>

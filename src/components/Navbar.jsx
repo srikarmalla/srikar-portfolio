@@ -106,16 +106,33 @@ export default function Navbar() {
   // =========================================================
 
   const scrollToSection = (id) => {
+    // Close mobile menu first
     setOpen(false)
 
-    const section = document.getElementById(id)
+    // Wait for React to update the menu before calculating position
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const section = document.getElementById(id)
 
-    if (section) {
-      section.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
+        if (!section) {
+          console.warn(`Section with id="${id}" was not found.`)
+          return
+        }
+
+        // Fixed navbar height
+        const navbarOffset = 80
+
+        const sectionTop =
+          section.getBoundingClientRect().top +
+          window.scrollY -
+          navbarOffset
+
+        window.scrollTo({
+          top: Math.max(0, sectionTop),
+          behavior: 'smooth',
+        })
       })
-    }
+    })
   }
 
   // =========================================================
@@ -159,20 +176,6 @@ export default function Navbar() {
     setLogoHovered(false)
     setEnteringUniverse(true)
 
-    /*
-      IMPORTANT:
-      Keep this shorter than before.
-
-      Old:
-      1400ms
-
-      New:
-      1100ms
-
-      This makes the portal feel like a transition
-      instead of a full-screen loading screen.
-    */
-
     navigationTimer.current = setTimeout(() => {
       navigate('/characters')
     }, 1100)
@@ -208,9 +211,7 @@ export default function Navbar() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
           >
-            {/* =================================================
-                DARK BACKGROUND
-            ================================================== */}
+            {/* DARK BACKGROUND */}
 
             <motion.div
               className="absolute inset-0 bg-[#020208]"
@@ -219,9 +220,7 @@ export default function Navbar() {
               transition={{ duration: 0.35 }}
             />
 
-            {/* =================================================
-                SOFT AMBIENT GLOW
-            ================================================== */}
+            {/* SOFT AMBIENT GLOW */}
 
             <motion.div
               className="
@@ -249,9 +248,7 @@ export default function Navbar() {
               }}
             />
 
-            {/* =================================================
-                MAIN PORTAL
-            ================================================== */}
+            {/* MAIN PORTAL */}
 
             <motion.div
               className="
@@ -283,9 +280,7 @@ export default function Navbar() {
               }}
             />
 
-            {/* =================================================
-                INNER DARK PORTAL
-            ================================================== */}
+            {/* INNER DARK PORTAL */}
 
             <motion.div
               className="
@@ -312,9 +307,7 @@ export default function Navbar() {
               }}
             />
 
-            {/* =================================================
-                PORTAL RINGS
-            ================================================== */}
+            {/* PORTAL RINGS */}
 
             {[0, 1, 2].map((ring) => (
               <motion.div
@@ -348,9 +341,7 @@ export default function Navbar() {
               />
             ))}
 
-            {/* =================================================
-                PORTAL LIGHT STREAKS
-            ================================================== */}
+            {/* PORTAL LIGHT STREAKS */}
 
             {[...Array(12)].map((_, index) => {
               const angle = index * 30
@@ -390,9 +381,7 @@ export default function Navbar() {
               )
             })}
 
-            {/* =================================================
-                PORTAL PARTICLES
-            ================================================== */}
+            {/* PORTAL PARTICLES */}
 
             {[...Array(24)].map((_, index) => {
               const angle = index * 15
@@ -418,8 +407,12 @@ export default function Navbar() {
                     scale: 0,
                   }}
                   animate={{
-                    x: Math.cos((angle * Math.PI) / 180) * distance,
-                    y: Math.sin((angle * Math.PI) / 180) * distance,
+                    x:
+                      Math.cos((angle * Math.PI) / 180) *
+                      distance,
+                    y:
+                      Math.sin((angle * Math.PI) / 180) *
+                      distance,
                     opacity: [0, 1, 0],
                     scale: [0, 1.5, 0],
                   }}
@@ -432,9 +425,7 @@ export default function Navbar() {
               )
             })}
 
-            {/* =================================================
-                ENTERING TEXT
-            ================================================== */}
+            {/* ENTERING TEXT */}
 
             <motion.div
               className="
@@ -541,9 +532,8 @@ export default function Navbar() {
           ================================================== */}
 
           <div className="relative flex items-center">
-            {/* =================================================
-                DISCOVERY CLOUD
-            ================================================== */}
+
+            {/* DISCOVERY CLOUD */}
 
             <AnimatePresence>
               {showDiscovery && !enteringUniverse && (
@@ -719,27 +709,6 @@ export default function Navbar() {
                         bg-cyan-400/80
                       "
                     />
-
-                    {/* ARROW */}
-
-                    <motion.div
-                      animate={{
-                        y: [0, 4, 0],
-                      }}
-                      transition={{
-                        duration: 1.2,
-                        repeat: Infinity,
-                      }}
-                      className="
-                        absolute
-                        -bottom-9
-                        left-9
-                        text-xl
-                        text-violet-300
-                      "
-                    >
-                      ↓
-                    </motion.div>
                   </motion.div>
                 </motion.div>
               )}
@@ -927,9 +896,7 @@ export default function Navbar() {
               </motion.div>
             </Link>
 
-            {/* =================================================
-                NAME
-            ================================================== */}
+            {/* NAME */}
 
             <motion.div
               className="ml-4 hidden md:block"
@@ -990,6 +957,7 @@ export default function Navbar() {
             {navLinks.map((link) => (
               <button
                 key={link.id}
+                type="button"
                 onClick={() => scrollToSection(link.id)}
                 className={`
                   relative
@@ -1056,7 +1024,8 @@ export default function Navbar() {
           ====================================================== */}
 
           <button
-            onClick={() => setOpen(!open)}
+            type="button"
+            onClick={() => setOpen((prev) => !prev)}
             className="
               flex
               h-10
@@ -1069,7 +1038,8 @@ export default function Navbar() {
               bg-white/5
               lg:hidden
             "
-            aria-label="Toggle menu"
+            aria-label={open ? 'Close menu' : 'Open menu'}
+            aria-expanded={open}
           >
             <div className="space-y-1.5">
               <motion.span
@@ -1150,11 +1120,16 @@ export default function Navbar() {
               "
             >
               <div className="flex flex-col px-6 py-5">
+
+                {/* MOBILE NAVIGATION */}
+
                 {navLinks.map((link) => (
                   <button
                     key={link.id}
+                    type="button"
                     onClick={() => scrollToSection(link.id)}
                     className="
+                      w-full
                       border-b
                       border-white/5
                       py-4
@@ -1163,6 +1138,7 @@ export default function Navbar() {
                       text-white/70
                       transition-colors
                       hover:text-white
+                      active:text-violet-300
                     "
                   >
                     {link.name}
@@ -1172,6 +1148,7 @@ export default function Navbar() {
                 {/* CHARACTER UNIVERSE */}
 
                 <button
+                  type="button"
                   onClick={handleMobileUniverse}
                   className="
                     mt-4

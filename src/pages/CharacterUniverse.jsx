@@ -3,23 +3,7 @@ import { AnimatePresence, motion, useAnimation } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
-
-/*
-  Install:
-    npm i three framer-motion react-router-dom
-
-  REAL 3D CHARACTER MODELS:
-    public/models/spiderman.glb
-    public/models/hulk.glb
-    public/models/ironman.glb
-    public/models/blackpanther.glb
-    public/models/doctorstrange.glb
-
-  The GLB files are loaded when available. If a model is missing,
-  the procedural fallback remains visible, so the page never breaks.
-
-  Use only 3D assets you are licensed/authorized to use.
-*/
+import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js'
 
 const universes = {
   spider: {
@@ -561,6 +545,48 @@ function buildHero(id, c) {
   return hero
 }
 
+/* ---------------- GLB cache ----------------
+   Only the selected world's model is requested. Parsed GLTFs are cached so
+   switching back to a world does not download/parse the same file again.
+   Cached assets are never disposed. Each visible instance is a safe clone.
+*/
+const gltfCache = new Map()
+
+function loadCachedGLTF(url) {
+  if (gltfCache.has(url)) return gltfCache.get(url)
+
+  const promise = new Promise((resolve, reject) => {
+    const loader = new GLTFLoader()
+    loader.load(url, resolve, undefined, reject)
+  }).catch((error) => {
+    gltfCache.delete(url)
+    throw error
+  })
+
+  gltfCache.set(url, promise)
+  return promise
+}
+
+function cloneGLTFScene(source) {
+  const root = cloneSkinned(source)
+
+  root.traverse((object) => {
+    if (!object.isMesh) return
+
+    if (object.material) {
+      object.material = Array.isArray(object.material)
+        ? object.material.map((material) => material.clone())
+        : object.material.clone()
+    }
+
+    object.userData.__glbInstance = true
+    object.castShadow = false
+    object.receiveShadow = false
+  })
+
+  return root
+}
+
 function normalizeLoadedModel(root) {
   root.traverse((object) => {
     if (!object.isMesh) return
@@ -728,22 +754,27 @@ function animateHero(id, h, t, dt, ctx) {
    THREE.JS WORLD
 ========================================================= */
 
-function Scene3D({ theme, mouse, onStomp }) {
+function Scene3D({ theme, mouse, pulse, onStomp, onModel }) {
   const ref = useRef(null)
   const stompRef = useRef(onStomp)
+  const modelRef = useRef(onModel)
   stompRef.current = onStomp
+  modelRef.current = onModel
 
   useEffect(() => {
     const canvas = ref.current
 
+    const mobile = window.innerWidth < 768
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
     const renderer = new THREE.WebGLRenderer({
       canvas,
       alpha: true,
-      antialias: true,
+      antialias: !mobile && !reducedMotion,
       powerPreference: 'high-performance',
     })
 
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75))
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1.2 : 1.6))
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     renderer.toneMappingExposure = 1.15
@@ -797,7 +828,7 @@ function Scene3D({ theme, mouse, onStomp }) {
     secondaryLight.position.set(8, 3, -8)
     scene.add(secondaryLight)
 
-    const STAR_COUNT = 650
+    const STAR_COUNT = mobile ? 360 : 650
     const starPositions = new Float32Array(STAR_COUNT * 3)
 
     for (let i = 0; i < STAR_COUNT; i += 1) {
@@ -1180,33 +1211,83 @@ function Scene3D({ theme, mouse, onStomp }) {
       scene.add(webLine)
     }
 
-    // Real GLB model loader.
+    // Tap-triggered 3D particle burst.
+    const tapBursts = []
+    let handledPulseId = null
+
+    const spawnTapBurst = (nx, ny) => {
+      const raycaster = new THREE.Raycaster()
+      raycaster.setFromCamera(new THREE.Vector2(nx, ny), cam)
+      const point = new THREE.Vector3()
+      const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0)
+      raycaster.ray.intersectPlane(plane, point)
+      if (!point) return
+
+      const count = mobile ? 22 : 38
+      const positions = new Float32Array(count * 3)
+      const velocities = new Float32Array(count * 3)
+
+      for (let i = 0; i < count; i += 1) {
+        positions[i * 3] = point.x
+        positions[i * 3 + 1] = point.y
+        positions[i * 3 + 2] = point.z + 0.15
+
+        const angle = Math.random() * Math.PI * 2
+        const speed = 1.8 + Math.random() * 4.5
+        velocities[i * 3] = Math.cos(angle) * speed
+        velocities[i * 3 + 1] = Math.sin(angle) * speed
+        velocities[i * 3 + 2] = (Math.random() - 0.5) * 2.4
+      }
+
+      const geometry = new THREE.BufferGeometry()
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+      const material = new THREE.PointsMaterial({
+        color: new THREE.Color(theme.accent),
+        size: mobile ? 0.11 : 0.15,
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      })
+      const points = new THREE.Points(geometry, material)
+      scene.add(points)
+      tapBursts.push({ points, velocities, age: 0, life: reducedMotion ? 0.35 : 0.8 })
+    }
+
+    // Load ONLY the active world's GLB. The parsed asset is cached.
     let disposed = false
+    let mixer = null
 
     if (theme.modelUrl) {
-      const loader = new GLTFLoader()
+      modelRef.current?.('loading')
 
-      loader.load(
-        theme.modelUrl,
-        (gltf) => {
+      loadCachedGLTF(theme.modelUrl)
+        .then((gltf) => {
           if (disposed) return
 
-          const model = normalizeLoadedModel(gltf.scene)
+          const model = normalizeLoadedModel(cloneGLTFScene(gltf.scene))
 
           hero.modelBaseY = model.position.y
           hero.modelRoot.add(model)
           hero.modelRoot.visible = true
           hero.body.visible = false
           hero.modelRoot.rotation.y = theme.modelRotationY || 0
-        },
-        undefined,
-        (error) => {
-          console.warn(
-            `3D model could not load: ${theme.modelUrl}`,
-            error,
-          )
-        },
-      )
+
+          if (gltf.animations?.length) {
+            mixer = new THREE.AnimationMixer(model)
+            const clip =
+              gltf.animations.find((item) =>
+                /run|walk|fly|float|idle|swing|attack|action/i.test(item.name),
+              ) || gltf.animations[0]
+            mixer.clipAction(clip).reset().fadeIn(0.2).play()
+          }
+
+          modelRef.current?.('ready')
+        })
+        .catch((error) => {
+          console.warn(`3D model could not load: ${theme.modelUrl}`, error)
+          if (!disposed) modelRef.current?.('fallback')
+        })
     }
 
     const heroLight = new THREE.PointLight(
@@ -1233,8 +1314,21 @@ function Scene3D({ theme, mouse, onStomp }) {
     const loop = (now) => {
       const dt = Math.min((now - last) / 1000, 0.05)
 
+      if (hidden) {
+        last = now
+        raf = requestAnimationFrame(loop)
+        return
+      }
+
       last = now
       t += dt
+
+      if (pulse?.current && pulse.current.id !== handledPulseId) {
+        handledPulseId = pulse.current.id
+        spawnTapBurst(pulse.current.nx, pulse.current.ny)
+      }
+
+      if (mixer && !reducedMotion) mixer.update(dt)
 
       for (const [object, rx, ry, rz] of spin) {
         object.rotation.x += rx * dt
@@ -1254,6 +1348,29 @@ function Scene3D({ theme, mouse, onStomp }) {
 
       if (grid) {
         grid.position.z = (t * 2.2) % 1.5
+      }
+
+      for (let i = tapBursts.length - 1; i >= 0; i -= 1) {
+        const burst = tapBursts[i]
+        burst.age += dt
+        const positions = burst.points.geometry.attributes.position.array
+
+        for (let j = 0; j < burst.velocities.length / 3; j += 1) {
+          positions[j * 3] += burst.velocities[j * 3] * dt
+          positions[j * 3 + 1] += burst.velocities[j * 3 + 1] * dt
+          positions[j * 3 + 2] += burst.velocities[j * 3 + 2] * dt
+          burst.velocities[j * 3 + 1] -= 3.5 * dt
+        }
+
+        burst.points.geometry.attributes.position.needsUpdate = true
+        burst.points.material.opacity = Math.max(0, 1 - burst.age / burst.life)
+
+        if (burst.age >= burst.life) {
+          burst.points.geometry.dispose()
+          burst.points.material.dispose()
+          scene.remove(burst.points)
+          tapBursts.splice(i, 1)
+        }
       }
 
       animateHero(id, hero, t, dt, ctx)
@@ -1290,30 +1407,54 @@ function Scene3D({ theme, mouse, onStomp }) {
       raf = requestAnimationFrame(loop)
     }
 
+    let hidden = document.hidden
+    const onVisibility = () => { hidden = document.hidden }
+    document.addEventListener('visibilitychange', onVisibility)
+
     raf = requestAnimationFrame(loop)
 
     return () => {
       disposed = true
       cancelAnimationFrame(raf)
       window.removeEventListener('resize', resize)
+      document.removeEventListener('visibilitychange', onVisibility)
+      mixer?.stopAllAction()
+      mixer = null
 
+      tapBursts.forEach((burst) => {
+        burst.points.geometry.dispose()
+        burst.points.material.dispose()
+      })
+      tapBursts.length = 0
+
+      const disposedMaterials = new Set()
       scene.traverse((object) => {
-        if (object.geometry) {
-          object.geometry.dispose()
+        if (object.userData?.__glbInstance) {
+          const materials = Array.isArray(object.material) ? object.material : [object.material]
+          materials.filter(Boolean).forEach((material) => {
+            if (!disposedMaterials.has(material)) {
+              disposedMaterials.add(material)
+              material.dispose()
+            }
+          })
+          return
         }
 
+        if (object.geometry) object.geometry.dispose()
         if (object.material) {
-          const materials = Array.isArray(object.material)
-            ? object.material
-            : [object.material]
-
-          materials.forEach((material) => material.dispose())
+          const materials = Array.isArray(object.material) ? object.material : [object.material]
+          materials.filter(Boolean).forEach((material) => {
+            if (!disposedMaterials.has(material)) {
+              disposedMaterials.add(material)
+              material.dispose()
+            }
+          })
         }
       })
 
       renderer.dispose()
     }
-  }, [theme, mouse])
+  }, [theme, mouse, pulse])
 
   return (
     <canvas
@@ -2114,6 +2255,9 @@ export default function CharacterUniverse() {
     useState(false)
 
   const [fx, setFx] = useState([])
+  const [modelState, setModelState] = useState('loading')
+
+  const pulse = useRef(null)
 
   const theme = universes[activeTheme]
 
@@ -2231,6 +2375,23 @@ export default function CharacterUniverse() {
       )
     }, 1700)
 
+    pulse.current = {
+      id,
+      nx: (event.clientX / window.innerWidth) * 2 - 1,
+      ny: -((event.clientY / window.innerHeight) * 2 - 1),
+    }
+
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      const vibration = {
+        spider: [18],
+        hulk: [70, 35, 100],
+        iron: [30, 18, 45],
+        panther: [18, 22, 18, 22, 18],
+        strange: [25, 35, 55],
+      }[activeTheme]
+      navigator.vibrate(vibration)
+    }
+
     if (activeTheme === 'spider') {
       quake(0.22)
     }
@@ -2341,10 +2502,25 @@ export default function CharacterUniverse() {
       <Scene3D
         theme={theme}
         mouse={mouse}
+        pulse={pulse}
         onStomp={() => quake(0.6)}
+        onModel={setModelState}
       />
 
       <div className="pointer-events-none fixed inset-0 z-20 bg-[radial-gradient(circle_at_center,transparent_25%,rgba(0,0,0,0.75)_100%)]" />
+
+      <AnimatePresence>
+        {modelState === 'loading' && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="pointer-events-none fixed left-1/2 top-5 z-[180] -translate-x-1/2 rounded-full border border-white/10 bg-black/50 px-4 py-2 text-[9px] uppercase tracking-[0.3em] text-white/60 backdrop-blur-xl"
+          >
+            Loading 3D character…
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {fx.map((effect) => (
         <ClickEffect
