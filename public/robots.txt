@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://srikarmalla.dev/sitemap.xml
+Sitemap: https://www.srikarmalla.dev/sitemap.xml
