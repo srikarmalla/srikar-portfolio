@@ -2,29 +2,33 @@ import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 
 export default function Reply() {
-  const [token, setToken] = useState('')
+  const [token] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    const params = new URLSearchParams(window.location.search)
+    return params.get('reply') || ''
+  })
   const [contact, setContact] = useState(null)
 
   const [message, setMessage] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const params = new URLSearchParams(window.location.search)
+    return Boolean(params.get('reply'))
+  })
   const [sending, setSending] = useState(false)
 
   const [sent, setSent] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    const params = new URLSearchParams(window.location.search)
+    return params.get('reply') ? '' : 'Invalid reply link.'
+  })
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const replyToken = params.get('reply')
+    if (!token) return
 
-    if (!replyToken) {
-      setError('Invalid reply link.')
-      setLoading(false)
-      return
-    }
-
-    setToken(replyToken)
-
-    fetch(`/api/reply?token=${encodeURIComponent(replyToken)}`)
+    let isMounted = true
+    fetch(`/api/reply?token=${encodeURIComponent(token)}`)
       .then(async (response) => {
         const data = await response.json()
 
@@ -32,15 +36,25 @@ export default function Reply() {
           throw new Error(data.message || 'Invalid reply link.')
         }
 
-        setContact(data.contact)
+        if (isMounted) {
+          setContact(data.contact)
+        }
       })
       .catch((err) => {
-        setError(err.message)
+        if (isMounted) {
+          setError(err.message)
+        }
       })
       .finally(() => {
-        setLoading(false)
+        if (isMounted) {
+          setLoading(false)
+        }
       })
-  }, [])
+
+    return () => {
+      isMounted = false
+    }
+  }, [token])
 
   const sendReply = async (e) => {
     e.preventDefault()

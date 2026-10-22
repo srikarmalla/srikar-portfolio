@@ -235,6 +235,19 @@ export default function Projects() {
                   </p>
 
 
+                  {/* Highlights / Features */}
+                  {project.highlights && project.highlights.length > 0 && (
+                    <ul className="mt-4 space-y-1.5 border-t border-white/5 pt-3 text-xs text-slate-300">
+                      {project.highlights.map((item, hIdx) => (
+                        <li key={hIdx} className="flex items-center gap-2">
+                          <span className="text-pink-400" aria-hidden="true">▹</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+
                   {/* Technology */}
 
                   <div className="mt-6 flex flex-wrap gap-2">
@@ -275,7 +288,7 @@ export default function Projects() {
                       <a
                         href={project.live}
                         target="_blank"
-                        rel="noreferrer"
+                        rel="noopener noreferrer"
                         className="
                           rounded-xl
                           bg-gradient-to-r
@@ -301,7 +314,7 @@ export default function Projects() {
                       <a
                         href={project.github}
                         target="_blank"
-                        rel="noreferrer"
+                        rel="noopener noreferrer"
                         className="
                           rounded-xl
                           border

@@ -21,6 +21,7 @@ export default function Contact() {
     name: '',
     email: '',
     message: '',
+    website: '',
   })
 
   const [sending, setSending] = useState(false)
@@ -56,6 +57,7 @@ export default function Contact() {
           name: form.name,
           email: form.email,
           message: form.message,
+          website: form.website,
         }),
       })
 
@@ -203,7 +205,7 @@ export default function Contact() {
                   key={social.name}
                   href={social.href}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className="
                     group
                     flex
@@ -241,6 +243,7 @@ export default function Contact() {
                       group-hover:scale-105
                       group-hover:text-white
                     "
+                    aria-hidden="true"
                   >
                     {social.icon}
                   </div>
@@ -303,6 +306,20 @@ export default function Contact() {
               onSubmit={submit}
               className="space-y-5"
             >
+
+              {/* Honeypot field (hidden from users, traps automated spam bots) */}
+              <div className="hidden" aria-hidden="true">
+                <label htmlFor="website">Leave this blank</label>
+                <input
+                  id="website"
+                  name="website"
+                  type="text"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={form.website}
+                  onChange={update}
+                />
+              </div>
 
               {/* NAME */}
 

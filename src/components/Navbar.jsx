@@ -86,18 +86,14 @@ export default function Navbar() {
   // =========================================================
 
   useEffect(() => {
+    const hideRef = hideDiscoveryTimer
+    const hoverRef = hoverDiscoveryTimer
+    const navRef = navigationTimer
+
     return () => {
-      if (hideDiscoveryTimer.current) {
-        clearTimeout(hideDiscoveryTimer.current)
-      }
-
-      if (hoverDiscoveryTimer.current) {
-        clearTimeout(hoverDiscoveryTimer.current)
-      }
-
-      if (navigationTimer.current) {
-        clearTimeout(navigationTimer.current)
-      }
+      clearTimeout(hideRef.current)
+      clearTimeout(hoverRef.current)
+      clearTimeout(navRef.current)
     }
   }, [])
 
@@ -133,6 +129,12 @@ export default function Navbar() {
         })
       })
     })
+  }
+
+  const handleResumeClick = (e) => {
+    if (e) e.preventDefault()
+    setOpen(false)
+    scrollToSection('contact')
   }
 
   // =========================================================
@@ -995,9 +997,9 @@ export default function Navbar() {
             {/* RESUME */}
 
             <a
-              href="/resume.pdf"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="#contact"
+              onClick={handleResumeClick}
+              aria-label="Request resume"
               className="
                 rounded-full
                 border
@@ -1174,9 +1176,9 @@ export default function Navbar() {
                 {/* RESUME */}
 
                 <a
-                  href="/resume.pdf"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href="#contact"
+                  onClick={handleResumeClick}
+                  aria-label="Request resume"
                   className="
                     mt-3
                     rounded-xl

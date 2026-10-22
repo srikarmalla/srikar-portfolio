@@ -1,10 +1,6 @@
 import crypto from 'crypto'
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
-const REPLY_SECRET = process.env.REPLY_SECRET
-
 /*
 |--------------------------------------------------------------------------
 | MAIN API HANDLER
@@ -14,11 +10,14 @@ const REPLY_SECRET = process.env.REPLY_SECRET
 export default async function handler(req, res) {
   /*
   |--------------------------------------------------------------------------
-  | Check environment variables
+  | Check environment variables defensively
   |--------------------------------------------------------------------------
   */
 
-  if (!process.env.RESEND_API_KEY) {
+  const resendApiKey = process.env.RESEND_API_KEY
+  const replySecret = process.env.REPLY_SECRET
+
+  if (!resendApiKey) {
     console.error('RESEND_API_KEY is missing.')
 
     return res.status(500).json({
@@ -27,7 +26,7 @@ export default async function handler(req, res) {
     })
   }
 
-  if (!REPLY_SECRET) {
+  if (!replySecret) {
     console.error('REPLY_SECRET is missing.')
 
     return res.status(500).json({
@@ -57,7 +56,7 @@ export default async function handler(req, res) {
         })
       }
 
-      const contact = verifyToken(token)
+      const contact = verifyToken(token, replySecret)
 
       if (!contact) {
         return res.status(401).json({
@@ -151,7 +150,7 @@ export default async function handler(req, res) {
       |--------------------------------------------------------------------------
       */
 
-      const contact = verifyToken(token)
+      const contact = verifyToken(token, replySecret)
 
       if (!contact) {
         return res.status(401).json({
@@ -183,11 +182,10 @@ export default async function handler(req, res) {
       /*
       |--------------------------------------------------------------------------
       | Send email through Resend
-      |
-      | IMPORTANT:
-      | Your domain is now verified.
       |--------------------------------------------------------------------------
       */
+
+      const resend = new Resend(resendApiKey)
 
       const { data, error } = await resend.emails.send({
         from: 'Srikar Malla <hello@srikarmalla.dev>',
@@ -264,7 +262,8 @@ export default async function handler(req, res) {
 |--------------------------------------------------------------------------
 */
 
-function verifyToken(token) {
+function verifyToken(token, secret) {
+  if (!secret) return null
   try {
     /*
     |--------------------------------------------------------------------------
@@ -296,7 +295,7 @@ function verifyToken(token) {
     |--------------------------------------------------------------------------
     */
 
-    const expectedSignature = createSignature(encodedPayload)
+    const expectedSignature = createSignature(encodedPayload, secret)
 
 
     /*
@@ -429,9 +428,9 @@ function verifyToken(token) {
 |--------------------------------------------------------------------------
 */
 
-function createSignature(payload) {
+function createSignature(payload, secret) {
   return crypto
-    .createHmac('sha256', REPLY_SECRET)
+    .createHmac('sha256', secret)
     .update(payload)
     .digest('base64url')
 }

@@ -156,11 +156,12 @@ export default function Skills() {
                       text-white
                       shadow-lg
                     `}
+                    aria-hidden="true"
                   >
                     {icon}
                   </div>
 
-                  <span className="text-xs font-medium text-slate-600">
+                  <span className="text-xs font-medium text-slate-400">
                     {String(index + 1).padStart(2, '0')}
                   </span>
 
@@ -318,11 +319,11 @@ export default function Skills() {
           className="mt-20 text-center"
         >
 
-          <p className="text-lg text-slate-500">
+          <p className="text-lg text-slate-400">
             Always learning.
-            <span className="mx-2 text-pink-500">•</span>
+            <span className="mx-2 text-pink-500" aria-hidden="true">•</span>
             Always building.
-            <span className="mx-2 text-orange-400">•</span>
+            <span className="mx-2 text-orange-400" aria-hidden="true">•</span>
             Always improving.
           </p>
 

@@ -1,9 +1,31 @@
 import { Resend } from 'resend'
 import crypto from 'crypto'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+/*
+  In-memory rate limiting map for basic spam protection
+*/
+const ipRequests = new Map()
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000 // 10 minutes
+const MAX_REQUESTS_PER_WINDOW = 5
 
-const REPLY_SECRET = process.env.REPLY_SECRET
+function isRateLimited(ip) {
+  if (!ip || ip === 'unknown') return false
+  const now = Date.now()
+  const history = (ipRequests.get(ip) || []).filter((time) => now - time < RATE_LIMIT_WINDOW_MS)
+  if (history.length >= MAX_REQUESTS_PER_WINDOW) {
+    return true
+  }
+  history.push(now)
+  ipRequests.set(ip, history)
+  if (ipRequests.size > 1000) {
+    for (const [key, timestamps] of ipRequests.entries()) {
+      const valid = timestamps.filter((time) => now - time < RATE_LIMIT_WINDOW_MS)
+      if (valid.length === 0) ipRequests.delete(key)
+      else ipRequests.set(key, valid)
+    }
+  }
+  return false
+}
 
 /*
   Escape user input before putting it into HTML email.
@@ -35,8 +57,8 @@ function isValidEmail(email) {
   The HMAC signature prevents someone from
   modifying the visitor information.
 */
-function createReplyToken(name, email) {
-  if (!REPLY_SECRET) {
+function createReplyToken(name, email, secret) {
+  if (!secret) {
     throw new Error('REPLY_SECRET is not configured.')
   }
 
@@ -51,7 +73,7 @@ function createReplyToken(name, email) {
     .toString('base64url')
 
   const signature = crypto
-    .createHmac('sha256', REPLY_SECRET)
+    .createHmac('sha256', secret)
     .update(encodedPayload)
     .digest('base64url')
 
@@ -72,11 +94,39 @@ export default async function handler(req, res) {
   }
 
   try {
+    /*
+      Honeypot protection: bots auto-fill hidden input fields
+    */
+    if (req.body?.website || req.body?.hp) {
+      return res.status(200).json({
+        success: true,
+        message: 'Message sent successfully.',
+      })
+    }
 
     /*
-      Check required environment variables.
+      IP-based rate limiting
     */
-    if (!process.env.RESEND_API_KEY) {
+    const clientIp =
+      (req.headers['x-forwarded-for'] && String(req.headers['x-forwarded-for']).split(',')[0].trim()) ||
+      req.socket?.remoteAddress ||
+      'unknown'
+
+    if (isRateLimited(clientIp)) {
+      return res.status(429).json({
+        success: false,
+        message: 'Too many requests. Please try again in a few minutes.',
+      })
+    }
+
+    /*
+      Check required environment variables defensively.
+    */
+    const resendApiKey = process.env.RESEND_API_KEY
+    const contactEmail = process.env.CONTACT_EMAIL
+    const replySecret = process.env.REPLY_SECRET
+
+    if (!resendApiKey) {
       console.error('RESEND_API_KEY is missing.')
 
       return res.status(500).json({
@@ -85,7 +135,7 @@ export default async function handler(req, res) {
       })
     }
 
-    if (!process.env.CONTACT_EMAIL) {
+    if (!contactEmail) {
       console.error('CONTACT_EMAIL is missing.')
 
       return res.status(500).json({
@@ -94,7 +144,7 @@ export default async function handler(req, res) {
       })
     }
 
-    if (!REPLY_SECRET) {
+    if (!replySecret) {
       console.error('REPLY_SECRET is missing.')
 
       return res.status(500).json({
@@ -103,6 +153,7 @@ export default async function handler(req, res) {
       })
     }
 
+    const resend = new Resend(resendApiKey)
 
     /*
       Get form data.
@@ -194,7 +245,8 @@ export default async function handler(req, res) {
     */
     const replyToken = createReplyToken(
       cleanName,
-      cleanEmail
+      cleanEmail,
+      replySecret
     )
 
 

@@ -13,6 +13,19 @@ export default function Hero() {
   const [roleIndex, setRoleIndex] = useState(0)
   const [text, setText] = useState('')
   const [isDeleting, setIsDeleting] = useState(false)
+  const [resumeNotice, setResumeNotice] = useState(false)
+
+  const handleResumeClick = (e) => {
+    e.preventDefault()
+    setResumeNotice(true)
+    const contactSection = document.getElementById('contact')
+    if (contactSection) {
+      contactSection.scrollIntoView({ behavior: 'smooth' })
+    }
+    setTimeout(() => {
+      setResumeNotice(false)
+    }, 4500)
+  }
 
   useEffect(() => {
     const currentRole = roles[roleIndex]
@@ -277,6 +290,8 @@ export default function Hero() {
                 delay: 0.7,
                 duration: 0.6,
               }}
+              aria-live="polite"
+              aria-atomic="true"
               className="
                 mt-6
                 min-h-10
@@ -295,7 +310,7 @@ export default function Hero() {
                 {text}
               </span>
 
-              <span className="ml-1 animate-pulse text-pink-400">
+              <span className="ml-1 animate-pulse text-pink-400" aria-hidden="true">
                 |
               </span>
             </motion.div>
@@ -404,8 +419,9 @@ export default function Hero() {
               {/* RESUME BUTTON */}
 
               <a
-                href="/resume.pdf"
-                download
+                href="#contact"
+                onClick={handleResumeClick}
+                aria-label="Request or download resume"
                 className="
                   group
                   relative
@@ -459,9 +475,21 @@ export default function Hero() {
                   Download Resume
                 </span>
 
-              
-
               </a>
+
+              {/* Graceful Resume Notice */}
+              {resumeNotice && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  role="status"
+                  aria-live="polite"
+                  className="w-full text-center text-xs text-pink-300 sm:text-left"
+                >
+                  📄 Resume available upon request. Connecting to contact section...
+                </motion.div>
+              )}
 
             </motion.div>
 
@@ -495,7 +523,7 @@ export default function Hero() {
               <a
                 href="https://github.com/srikarmalla"
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="
                   group
                   inline-flex
@@ -503,7 +531,7 @@ export default function Hero() {
                   rounded-lg
                   px-2
                   py-1
-                  text-slate-500
+                  text-slate-400
                   transition-all
                   duration-300
                   hover:bg-white/5
@@ -523,6 +551,7 @@ export default function Hero() {
                     group-hover:translate-x-1
                     group-hover:text-pink-400
                   "
+                  aria-hidden="true"
                 >
                   ↗
                 </span>
@@ -531,7 +560,7 @@ export default function Hero() {
 
               {/* Divider */}
 
-              <span className="hidden text-slate-700 sm:block">
+              <span className="hidden text-slate-700 sm:block" aria-hidden="true">
                 /
               </span>
 
@@ -541,7 +570,7 @@ export default function Hero() {
               <a
                 href="https://www.linkedin.com/in/srikar-malla/"
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="
                   group
                   inline-flex
@@ -549,7 +578,7 @@ export default function Hero() {
                   rounded-lg
                   px-2
                   py-1
-                  text-slate-500
+                  text-slate-400
                   transition-all
                   duration-300
                   hover:bg-white/5
@@ -569,6 +598,7 @@ export default function Hero() {
                     group-hover:translate-x-1
                     group-hover:text-blue-400
                   "
+                  aria-hidden="true"
                 >
                   ↗
                 </span>
