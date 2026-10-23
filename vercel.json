@@ -21,10 +21,19 @@
       "permanent": false
     }
   ],
-  "rewrites": [
-    {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
-    }
-  ]
+  
+"rewrites": [
+  {
+    "source": "/projects/spendwise",
+    "destination": "https://spend-wise-expense-tracker-brown.vercel.app/"
+  },
+  {
+    "source": "/projects/spendwise/:path*",
+    "destination": "https://spend-wise-expense-tracker-brown.vercel.app/:path*"
+  },
+  {
+    "source": "/((?!api/|projects/spendwise).*)",
+    "destination": "/index.html"
+  }
+]
 }
